@@ -1,0 +1,7 @@
+/build*/
+/bin*/
+/tests/artifacts/
+/config/*.key
+/config/*.pub
+/config/allowed-peers.conf
+*.swp
