@@ -61,6 +61,15 @@ int main(int argc, char **argv) {
                     }
 
                     if (n<0) { if (errno==EINTR) continue; if (errno==EAGAIN||errno==EWOULDBLOCK) break; perror("client read"); goto out; }
+                }
+            } else if (fd==timer) {
+                uint64_t ticks; ssize_t n=read(fd,&ticks,sizeof(ticks));
+
+                if (n<0&&errno==EAGAIN) continue;
+
+                if (n!=sizeof(ticks)) { perror("timer read"); goto out; }
+                uint64_t now=vn_now();
+
                 if ((c.active&&now-c.seen>=c.o.peer_timeout)||(!c.active&&now-c.started>=c.o.peer_timeout)) reset(&c);
 
                 if (c.active) send_encrypted(&c,VN_KEEPALIVE,NULL,0); else handshake(&c);

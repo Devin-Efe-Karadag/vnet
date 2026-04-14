@@ -36,6 +36,34 @@ static void send_encrypted(struct relay *r, unsigned index, uint8_t type, const 
         vn_mac_learn(r->macs,plain+6,(unsigned)index,p->seen);
 
         int dest=(plain[0]&1)?-1:vn_mac_find(r->macs,plain);
+
+        if (dest>=0&&r->peers[dest].active) {
+            if (dest!=index) { r->unicasts++; send_encrypted(r,(unsigned)dest,VN_DATA,plain,(size_t)len); }
+        } else {
+            r->floods++;
+
+            for (size_t i=0;i<r->count;i++) if ((int)i!=index&&r->peers[i].active)
+                send_encrypted(r,(unsigned)i,VN_DATA,plain,(size_t)len);
+        }
+        break;
+    }
+    default: r->rejected++; break;
+    }
+}
+int main(int argc, char **argv) {
+    struct relay r={0}; int timer=-1,signals=-1,ep=-1,result=1; r.udp=-1;
+
+    if (vn_options_parse(argc,argv,&r.o,1)) {
+        if (fprintf(stderr,"usage: %s --bind IPv4:PORT --network-id NAME --identity FILE --allowlist FILE [--mtu 1300 --peer-timeout 30 --mac-age 60]\n",argv[0])<0) return 1;
+
+        return 2;
+    }
+
+    if (sodium_init()<0) return 1;
+
+    struct sockaddr_in bind_addr;
+
+    if (vn_endpoint(r.o.endpoint,&bind_addr)||vn_identity_load(r.o.identity,&r.id,0)||
         if (count<0) { if (errno==EINTR) continue; perror("epoll_wait"); goto out; }
 
         for (int i=0;i<count;i++) {
@@ -64,14 +92,36 @@ static void send_encrypted(struct relay *r, unsigned index, uint8_t type, const 
 
                 for (size_t j=0;j<r.count;j++) {
                     struct vn_peer *p=&r.peers[j];
+
+                    if (p->active&&now-p->seen>=r.o.peer_timeout) expire(&r,(unsigned)j,"timeout");
+
                     if (p->pending.ready&&now-p->pending_since>=r.o.peer_timeout)
+                        sodium_memzero(&p->pending,sizeof(p->pending));
                 }
+                vn_mac_age(r.macs,now,r.o.mac_age);
+
                 if (now%5==0) status(&r);
+            } else if (fd==signals) {
                 struct signalfd_siginfo sig; ssize_t n=read(fd,&sig,sizeof(sig));
+
+                if (n<0&&errno==EAGAIN) continue;
+
                 if (n!=sizeof(sig)) { perror("signal read"); goto out; }
+
+                if (sig.ssi_signo==SIGUSR1) status(&r); else running=0;
             }
+        }
     }
+
+    for (size_t i=0;i<r.count;i++) if (r.peers[i].active) send_encrypted(&r,(unsigned)i,VN_GOODBYE,NULL,0);
     status(&r); result=0;
+out:
     if (ep>=0&&close(ep)<0) result=1;
+
+    if (timer>=0&&close(timer)<0) result=1;
+
     if (signals>=0&&close(signals)<0) result=1;
+
+    if (r.udp>=0&&close(r.udp)<0) result=1;
     sodium_memzero(&r,sizeof(r)); return result;
+}
