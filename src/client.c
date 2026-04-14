@@ -49,6 +49,18 @@ int main(int argc, char **argv) {
     c.udp=vn_udp(NULL); ep=vn_events(&timer,&signals);
 
     if (c.udp<0||ep<0||vn_epoll_add(ep,c.udp)<0||vn_epoll_add(ep,c.tap)<0) { perror("client setup"); goto out; }
+                    } else {
+                        n=read(fd,packet,sizeof(packet));
+
+                        if (n>0) {
+                            if (c.active&&n>=14&&(size_t)n<=c.o.mtu+14) send_encrypted(&c,VN_DATA,packet,(size_t)n);
+                            else c.drops++;
+                        }
+
+                        if (n==0) { vn_log("TAP closed"); goto out; }
+                    }
+
+                    if (n<0) { if (errno==EINTR) continue; if (errno==EAGAIN||errno==EWOULDBLOCK) break; perror("client read"); goto out; }
                 if ((c.active&&now-c.seen>=c.o.peer_timeout)||(!c.active&&now-c.started>=c.o.peer_timeout)) reset(&c);
 
                 if (c.active) send_encrypted(&c,VN_KEEPALIVE,NULL,0); else handshake(&c);
