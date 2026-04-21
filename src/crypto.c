@@ -1,3 +1,22 @@
+#include "vnet_crypto.h"
+#include "vnet_util.h"
+#include <sodium.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+void vn_node(uint8_t node[16], const uint8_t pk[32]) {
+    if (crypto_generichash(node,16,pk,32,NULL,0)) abort(); /* fixed valid parameters */
+}
+static int read_exact(int fd, uint8_t *p, size_t n) {
+    while (n) {
+        ssize_t r=read(fd,p,n);
+
+        if (r<0&&errno==EINTR) continue;
+
         if (r<=0) return -1;
         p+=(size_t)r; n-=(size_t)r;
     }
