@@ -27,6 +27,26 @@ static void send_encrypted(struct relay *r, unsigned index, uint8_t type, const 
     int len=vn_seal(&p->session,r->o.network,r->id.node,type,data,n,packet);
 
     if (len<0) { expire(r,index,"sequence-exhausted"); return; }
+
+    if (vn_send(r->udp,packet,(size_t)len,&p->endpoint)) { p->drops++; r->send_drop++; }
+    else p->tx++;
+}
+static void hello(struct relay *r, unsigned index, const uint8_t *packet, const struct sockaddr_in *from) {
+    struct vn_peer *p=&r->peers[index]; const uint8_t *payload=packet+VN_HEADER;
+
+    if (sodium_memcmp(payload,p->pk,32)) { r->rejected++; return; }
+    uint64_t now=vn_now();
+
+    if (!p->pending.ready||memcmp(p->challenge,payload+32,32)||!vn_same_endpoint(from,&p->pending_endpoint)) {
+        /* One bounded pending exchange per allowed identity; at most one replacement per second. */
+
+        if (p->pending_since==now) { r->rejected++; return; }
+        uint8_t sid[16]; randombytes_buf(sid,sizeof(sid));
+
+        if (vn_derive(&p->pending,&r->id,p->pk,payload+32,sid,r->o.network,1)) { r->rejected++; return; }
+        memcpy(p->challenge,payload+32,32); p->pending_endpoint=*from; p->pending_since=now;
+    }
+    uint8_t out[VN_HEADER+64]; struct vn_header h={.type=VN_WELCOME,.len=64};
     }
 
     if (!p->active||!vn_same_endpoint(from,&p->endpoint)||memcmp(h.sid,p->session.sid,16)||h.type<VN_CONFIRM) {

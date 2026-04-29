@@ -23,6 +23,14 @@ static void send_encrypted(struct client *c, uint8_t type, const uint8_t *data, 
     uint8_t packet[VN_PACKET]; int n=vn_seal(&c->session,c->o.network,c->id.node,type,data,size,packet);
 
     if (n<0) { reset(c); return; }
+
+    if (vn_send(c->udp,packet,(size_t)n,&c->server)) c->drops++; else c->tx++;
+}
+static void handshake(struct client *c) {
+    if (c->session.ready) { send_encrypted(c,VN_CONFIRM,NULL,0); return; }
+    uint8_t packet[VN_HEADER+64]; struct vn_header h={.type=VN_HELLO,.len=64};
+    memcpy(h.node,c->id.node,16); vn_header_write(packet,c->o.network,&h);
+    memcpy(packet+VN_HEADER,c->id.pk,32); memcpy(packet+VN_HEADER+32,c->challenge,32);
         if (written!=len) c->drops++;
         break;
     }
