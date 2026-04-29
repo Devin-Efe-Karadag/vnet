@@ -75,3 +75,28 @@ int vn_identity_load(const char *path, struct vn_identity *id, int create) {
 }
 int vn_public_load(const char *path, uint8_t pk[32]) {
     FILE *f=fopen(path,"r"); char hex[67];
+
+    if (!f) return -1;
+
+    int ok=fgets(hex,sizeof(hex),f)?0:-1;
+
+    if (!ok) { hex[strcspn(hex,"\r\n")]=0; ok=vn_unhex(pk,32,hex); }
+
+    if (!ok&&(fgetc(f)!=EOF||ferror(f))) ok=-1;
+
+    if (fclose(f)) ok=-1;
+
+    return ok;
+}
+int vn_derive(struct vn_session *s, const struct vn_identity *id,
+              const uint8_t other[32], const uint8_t challenge[32],
+
+              const uint8_t sid[16], const char *network, int server) {
+    uint8_t rx[32],tx[32],context[96]={0};
+                 crypto_kx_client_session_keys(rx,tx,id->pk,id->sk,other);
+    if (r) return -1;
+    memcpy(context,"vnet-v2",7); memcpy(context+8,network,strlen(network));
+    memcpy(context+40,challenge,32); memcpy(context+72,sid,16);
+    memset(s,0,sizeof(*s)); memcpy(s->sid,sid,16);
+    s->tx_prefix[0]=(uint8_t)(server?1:0);
+    memcpy(s->tx_prefix+1,sid,15); memcpy(s->rx_prefix+1,sid,15);
