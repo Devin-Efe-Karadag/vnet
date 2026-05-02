@@ -104,3 +104,11 @@ int vn_derive(struct vn_session *s, const struct vn_identity *id,
     s->rx_prefix[0]=(uint8_t)(server?0:1);
     memcpy(s->tx_prefix+1,sid,15); memcpy(s->rx_prefix+1,sid,15);
     /* kx already binds both public identities and direction. */
+
+    int failed=crypto_generichash(s->rx,32,context,sizeof(context),rx,32);
+    if (failed) { sodium_memzero(s,sizeof(*s)); return -1; }
+int vn_seal(struct vn_session *s, const char *network, const uint8_t sender[16],
+    struct vn_header h={.type=type,.seq=++s->sent,.len=(uint16_t)(n+VN_TAG)};
+        sodium_memcmp(h->sid,s->sid,16)) return -1;
+    uint8_t nonce[24]; memcpy(nonce,s->rx_prefix,16); vn_put64(nonce+16,h->seq);
+        s->window=delta>=64?1:(s->window<<delta)|1; s->highest=h->seq;
