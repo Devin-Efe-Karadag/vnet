@@ -47,6 +47,16 @@ static void hello(struct relay *r, unsigned index, const uint8_t *packet, const 
         memcpy(p->challenge,payload+32,32); p->pending_endpoint=*from; p->pending_since=now;
     }
     uint8_t out[VN_HEADER+64]; struct vn_header h={.type=VN_WELCOME,.len=64};
+    int index=vn_peer_find(r->peers,r->count,h.node);
+
+    if (index<0) { r->rejected++; return; }
+
+    struct vn_peer *p=&r->peers[index];
+
+    if (h.type==VN_HELLO) { hello(r,(unsigned)index,packet,from); return; }
+
+    if (h.type==VN_CONFIRM&&p->pending.ready&&!memcmp(h.sid,p->pending.sid,16)&&
+        vn_same_endpoint(from,&p->pending_endpoint)) {
     }
 
     if (!p->active||!vn_same_endpoint(from,&p->endpoint)||memcmp(h.sid,p->session.sid,16)||h.type<VN_CONFIRM) {

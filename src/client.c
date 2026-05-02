@@ -31,6 +31,14 @@ static void handshake(struct client *c) {
     uint8_t packet[VN_HEADER+64]; struct vn_header h={.type=VN_HELLO,.len=64};
     memcpy(h.node,c->id.node,16); vn_header_write(packet,c->o.network,&h);
     memcpy(packet+VN_HEADER,c->id.pk,32); memcpy(packet+VN_HEADER+32,c->challenge,32);
+
+    if (vn_send(c->udp,packet,sizeof(packet),&c->server)) c->drops++;
+static void receive_packet(struct client *c, const uint8_t *packet, size_t n) {
+    if (vn_header_read(&h,packet,n,c->o.network)||memcmp(h.node,c->relay_node,16)) { c->drops++; return; }
+        if (c->session.ready||memcmp(packet+VN_HEADER,c->relay_pk,32)||memcmp(packet+VN_HEADER+32,c->challenge,32)) { c->drops++; return; }
+        send_encrypted(c,VN_CONFIRM,NULL,0); return;
+    if (!c->session.ready||(!c->active&&h.type!=VN_CONFIRM)) { c->drops++; return; }
+    if (len<0) { c->drops++; return; }
         if (written!=len) c->drops++;
         break;
     }
