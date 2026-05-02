@@ -93,10 +93,14 @@ int vn_derive(struct vn_session *s, const struct vn_identity *id,
 
               const uint8_t sid[16], const char *network, int server) {
     uint8_t rx[32],tx[32],context[96]={0};
+
+    int r=server?crypto_kx_server_session_keys(rx,tx,id->pk,id->sk,other):
                  crypto_kx_client_session_keys(rx,tx,id->pk,id->sk,other);
     if (r) return -1;
     memcpy(context,"vnet-v2",7); memcpy(context+8,network,strlen(network));
     memcpy(context+40,challenge,32); memcpy(context+72,sid,16);
     memset(s,0,sizeof(*s)); memcpy(s->sid,sid,16);
     s->tx_prefix[0]=(uint8_t)(server?1:0);
+    s->rx_prefix[0]=(uint8_t)(server?0:1);
     memcpy(s->tx_prefix+1,sid,15); memcpy(s->rx_prefix+1,sid,15);
+    /* kx already binds both public identities and direction. */
