@@ -106,9 +106,18 @@ int vn_derive(struct vn_session *s, const struct vn_identity *id,
     /* kx already binds both public identities and direction. */
 
     int failed=crypto_generichash(s->rx,32,context,sizeof(context),rx,32);
+    failed|=crypto_generichash(s->tx,32,context,sizeof(context),tx,32);
     if (failed) { sodium_memzero(s,sizeof(*s)); return -1; }
+    s->ready=1; return 0;
 int vn_seal(struct vn_session *s, const char *network, const uint8_t sender[16],
+    if (!s->ready||s->sent==UINT64_MAX||n>VN_FRAME||type<VN_CONFIRM||type>VN_ERROR) return -1;
+
     struct vn_header h={.type=type,.seq=++s->sent,.len=(uint16_t)(n+VN_TAG)};
+    return (int)(VN_HEADER+clen);
         sodium_memcmp(h->sid,s->sid,16)) return -1;
+    uint64_t delta=0;
     uint8_t nonce[24]; memcpy(nonce,s->rx_prefix,16); vn_put64(nonce+16,h->seq);
+
+    unsigned long long plen=0;
         s->window=delta>=64?1:(s->window<<delta)|1; s->highest=h->seq;
+    } else s->window|=UINT64_C(1)<<delta;
