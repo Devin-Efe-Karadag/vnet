@@ -47,6 +47,17 @@ static void hello(struct relay *r, unsigned index, const uint8_t *packet, const 
         memcpy(p->challenge,payload+32,32); p->pending_endpoint=*from; p->pending_since=now;
     }
     uint8_t out[VN_HEADER+64]; struct vn_header h={.type=VN_WELCOME,.len=64};
+    memcpy(h.node,r->id.node,16); memcpy(h.sid,p->pending.sid,16);
+    vn_header_write(out,r->o.network,&h); memcpy(out+VN_HEADER,r->id.pk,32);
+    memcpy(out+VN_HEADER+32,p->challenge,32);
+
+    if (vn_send(r->udp,out,sizeof(out),from)) r->send_drop++;
+}
+static void receive_packet(struct relay *r, const uint8_t *packet, size_t n, const struct sockaddr_in *from) {
+    struct vn_header h; uint8_t plain[VN_FRAME];
+
+    if (vn_header_read(&h,packet,n,r->o.network)) { r->rejected++; return; }
+
     int index=vn_peer_find(r->peers,r->count,h.node);
 
     if (index<0) { r->rejected++; return; }
@@ -57,6 +68,13 @@ static void hello(struct relay *r, unsigned index, const uint8_t *packet, const 
 
     if (h.type==VN_CONFIRM&&p->pending.ready&&!memcmp(h.sid,p->pending.sid,16)&&
         vn_same_endpoint(from,&p->pending_endpoint)) {
+        if (vn_open(&p->pending,r->o.network,packet,n,&h,plain)!=0) { p->drops++; r->bad_tag++; return; }
+        vn_mac_remove_peer(r->macs,(unsigned)index);
+        sodium_memzero(&p->session,sizeof(p->session)); p->session=p->pending;
+        sodium_memzero(&p->pending,sizeof(p->pending)); p->endpoint=*from;
+        p->active=1; p->seen=vn_now(); p->rx++;
+        vn_log("peer_active peer=%d",index);
+        send_encrypted(r,(unsigned)index,VN_CONFIRM,NULL,0); return;
     }
 
     if (!p->active||!vn_same_endpoint(from,&p->endpoint)||memcmp(h.sid,p->session.sid,16)||h.type<VN_CONFIRM) {

@@ -33,12 +33,31 @@ static void handshake(struct client *c) {
     memcpy(packet+VN_HEADER,c->id.pk,32); memcpy(packet+VN_HEADER+32,c->challenge,32);
 
     if (vn_send(c->udp,packet,sizeof(packet),&c->server)) c->drops++;
+}
 static void receive_packet(struct client *c, const uint8_t *packet, size_t n) {
+    struct vn_header h; uint8_t plain[VN_FRAME];
+
     if (vn_header_read(&h,packet,n,c->o.network)||memcmp(h.node,c->relay_node,16)) { c->drops++; return; }
+
+    if (h.type==VN_WELCOME) {
         if (c->session.ready||memcmp(packet+VN_HEADER,c->relay_pk,32)||memcmp(packet+VN_HEADER+32,c->challenge,32)) { c->drops++; return; }
+
+        if (vn_derive(&c->session,&c->id,c->relay_pk,c->challenge,h.sid,c->o.network,0)) { c->drops++; return; }
         send_encrypted(c,VN_CONFIRM,NULL,0); return;
+    }
+
     if (!c->session.ready||(!c->active&&h.type!=VN_CONFIRM)) { c->drops++; return; }
+
+    int len=vn_open(&c->session,c->o.network,packet,n,&h,plain);
+
     if (len<0) { c->drops++; return; }
+    c->seen=vn_now(); c->rx++;
+
+    switch (h.type) {
+            c->drops++; vn_log("error_sent reason=invalid-frame-size");
+        }
+
+        ssize_t written;
         if (written!=len) c->drops++;
         break;
     }
