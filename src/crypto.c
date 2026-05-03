@@ -117,17 +117,23 @@ int vn_seal(struct vn_session *s, const char *network, const uint8_t sender[16],
     if (!s->ready||s->sent==UINT64_MAX||n>VN_FRAME||type<VN_CONFIRM||type>VN_ERROR) return -1;
 
     struct vn_header h={.type=type,.seq=++s->sent,.len=(uint16_t)(n+VN_TAG)};
+    memcpy(h.node,sender,16); memcpy(h.sid,s->sid,16);
+    unsigned long long clen=0;
     return (int)(VN_HEADER+clen);
 }
+int vn_open(struct vn_session *s, const char *network, const uint8_t *packet,
         sodium_memcmp(h->sid,s->sid,16)) return -1;
     uint64_t delta=0;
 
     if (h->seq<=s->highest) {
+        delta=s->highest-h->seq;
     uint8_t nonce[24]; memcpy(nonce,s->rx_prefix,16); vn_put64(nonce+16,h->seq);
 
     unsigned long long plen=0;
 
     if (crypto_aead_xchacha20poly1305_ietf_decrypt(plain,&plen,NULL,packet+VN_HEADER,
+        h->len,packet,VN_HEADER,nonce,s->rx)) return -1;
         s->window=delta>=64?1:(s->window<<delta)|1; s->highest=h->seq;
     } else s->window|=UINT64_C(1)<<delta;
     return (int)plen;
+}
