@@ -5,3 +5,6 @@ setup_namespaces() {
         if ip netns list | awk '{print $1}' | grep -qx "vnet-$letter"; then
             echo "Namespace vnet-$letter already exists; refusing to alter it" >&2; return 1
         fi
+        if ip link show "vn-host-$letter" &>/dev/null; then
+            echo "Link vn-host-$letter already exists; refusing to alter it" >&2; return 1
+        fi
