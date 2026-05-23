@@ -80,6 +80,7 @@ static void receive_packet(struct relay *r, const uint8_t *packet, size_t n, con
     if (!p->active||!vn_same_endpoint(from,&p->endpoint)||memcmp(h.sid,p->session.sid,16)||h.type<VN_CONFIRM) {
         r->rejected++; p->drops++; return;
     }
+    case VN_KEEPALIVE: send_encrypted(r,(unsigned)index,VN_KEEPALIVE,NULL,0); break;
         }
         vn_mac_learn(r->macs,plain+6,(unsigned)index,p->seen);
 
