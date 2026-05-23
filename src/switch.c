@@ -81,10 +81,16 @@ static void receive_packet(struct relay *r, const uint8_t *packet, size_t n, con
         r->rejected++; p->drops++; return;
     }
     case VN_KEEPALIVE: send_encrypted(r,(unsigned)index,VN_KEEPALIVE,NULL,0); break;
+    case VN_GOODBYE: expire(r,(unsigned)index,"goodbye"); break;
     case VN_ERROR: expire(r,(unsigned)index,"remote-error"); break;
+    case VN_DATA: {
         static const uint8_t zero[6]={0};
+
+        if (len<14||(unsigned)len>r->o.mtu+14||(plain[6]&1)||!memcmp(plain+6,zero,6)) {
             p->drops++; r->rejected++;
+            vn_log("error_sent peer=%d reason=invalid-ethernet",index);
             send_encrypted(r,(unsigned)index,VN_ERROR,NULL,0);
+            expire(r,(unsigned)index,"invalid-ethernet"); break;
         }
         vn_mac_learn(r->macs,plain+6,(unsigned)index,p->seen);
 
