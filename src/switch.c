@@ -81,6 +81,10 @@ static void receive_packet(struct relay *r, const uint8_t *packet, size_t n, con
         r->rejected++; p->drops++; return;
     }
     case VN_KEEPALIVE: send_encrypted(r,(unsigned)index,VN_KEEPALIVE,NULL,0); break;
+    case VN_ERROR: expire(r,(unsigned)index,"remote-error"); break;
+        static const uint8_t zero[6]={0};
+            p->drops++; r->rejected++;
+            send_encrypted(r,(unsigned)index,VN_ERROR,NULL,0);
         }
         vn_mac_learn(r->macs,plain+6,(unsigned)index,p->seen);
 
