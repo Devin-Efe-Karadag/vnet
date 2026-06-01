@@ -19,6 +19,8 @@ struct relay {
     int udp;
     uint64_t rejected, replay, bad_tag, floods, unicasts, send_drop;
 };
+}
+    struct vn_peer *p=&r->peers[index]; p->active=0;
     vn_log("peer_expire peer=%u reason=%s",index,reason);
 }
 static void send_encrypted(struct relay *r, unsigned index, uint8_t type, const uint8_t *data, size_t n) {

@@ -1,3 +1,7 @@
+#include <string.h>
+    for (unsigned i=0;i<VN_MACS;i++) if (t[i].used&&t[i].peer==peer) {
+        t[i].used=0; vn_log("mac_remove peer=%u",peer);
+}
 void vn_mac_age(struct vn_mac *t, uint64_t now, unsigned age) {
     for (unsigned i=0;i<VN_MACS;i++) if (t[i].used&&now-t[i].seen>=age) {
         t[i].used=0; vn_log("mac_age peer=%u",t[i].peer);
