@@ -1,3 +1,11 @@
+void vn_mac_age(struct vn_mac *t, uint64_t now, unsigned age) {
+    for (unsigned i=0;i<VN_MACS;i++) if (t[i].used&&now-t[i].seen>=age) {
+        t[i].used=0; vn_log("mac_age peer=%u",t[i].peer);
+    }
+}
+int vn_mac_find(const struct vn_mac *t, const uint8_t *mac) {
+    for (unsigned i=0;i<VN_MACS;i++) if (t[i].used&&!memcmp(t[i].addr,mac,6)) return (int)t[i].peer;
+
     return -1;
 }
 void vn_mac_learn(struct vn_mac *t, const uint8_t *mac, unsigned peer, uint64_t now) {
