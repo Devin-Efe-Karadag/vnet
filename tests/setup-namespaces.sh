@@ -8,3 +8,6 @@ setup_namespaces() {
         if ip link show "vn-host-$letter" &>/dev/null; then
             echo "Link vn-host-$letter already exists; refusing to alter it" >&2; return 1
         fi
+    done
+    local i=0 base letter
+    for letter in a b c; do

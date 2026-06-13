@@ -17,6 +17,9 @@ struct client {
 
     int udp,tap,active;
     uint64_t seen,started,rx,tx,drops;
+};
+static void reset(struct client *c) {
+    sodium_memzero(&c->session,sizeof(c->session)); randombytes_buf(c->challenge,32);
     c->active=0; c->started=vn_now(); vn_log("connecting server=%s",c->o.endpoint);
 }
 static void send_encrypted(struct client *c, uint8_t type, const uint8_t *data, size_t size) {

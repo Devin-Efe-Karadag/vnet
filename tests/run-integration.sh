@@ -10,3 +10,9 @@ if grep -q session_active "$ART/wrong-pin.log" || grep -q peer_active "$ART/rela
     echo 'FAIL incorrect relay pin authenticated' >&2; exit 1
 fi
 echo 'PASS real client rejects incorrect relay identity pin'
+kill -TERM "$relay_pid"; wait "$relay_pid"; relay_pid=
+start_relay 2 "$ART/relay-restart.log"
+# C's deliberate stop/recreation assigned a new TAP MAC; remove old kernel ARP.
+for letter in a b c; do ip -n "vnet-$letter" neighbour flush dev vnet0; done
+sleep 3
+ip netns exec vnet-a ping -n -c 2 -W 2 10.77.0.4 >>"$ART/ping.txt"
