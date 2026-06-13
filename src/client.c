@@ -58,6 +58,8 @@ static void receive_packet(struct client *c, const uint8_t *packet, size_t n) {
         }
 
         ssize_t written;
+        do { written=write(c->tap,plain,(size_t)len); } while (written<0&&errno==EINTR);
+
         if (written!=len) c->drops++;
         break;
     }
