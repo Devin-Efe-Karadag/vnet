@@ -125,6 +125,17 @@ int main(int argc, char **argv) {
     struct sockaddr_in bind_addr;
 
     if (vn_endpoint(r.o.endpoint,&bind_addr)||vn_identity_load(r.o.identity,&r.id,0)||
+        vn_allowlist(r.o.allowlist,r.peers,&r.count)) { vn_log("invalid endpoint, identity, or allowlist"); goto out; }
+    r.udp=vn_udp(&bind_addr); ep=vn_events(&timer,&signals);
+
+    if (r.udp<0||ep<0||vn_epoll_add(ep,r.udp)<0) { perror("relay setup"); goto out; }
+    vn_log("relay_ready bind=%s allowed=%zu mtu=%u",r.o.endpoint,r.count,r.o.mtu);
+
+    int running=1;
+
+    while (running) {
+        struct epoll_event events[4]; int count=epoll_wait(ep,events,4,-1);
+
         if (count<0) { if (errno==EINTR) continue; perror("epoll_wait"); goto out; }
 
         for (int i=0;i<count;i++) {

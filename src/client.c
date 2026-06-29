@@ -89,6 +89,28 @@ int main(int argc, char **argv) {
     c.udp=vn_udp(NULL); ep=vn_events(&timer,&signals);
 
     if (c.udp<0||ep<0||vn_epoll_add(ep,c.udp)<0||vn_epoll_add(ep,c.tap)<0) { perror("client setup"); goto out; }
+    reset(&c); handshake(&c); int running=1;
+
+    while (running) {
+        struct epoll_event events[4]; int count=epoll_wait(ep,events,4,-1);
+
+        if (count<0) { if (errno==EINTR) continue; perror("epoll_wait"); goto out; }
+
+        for (int i=0;i<count;i++) {
+            int fd=events[i].data.fd;
+
+            if (fd==c.udp||fd==c.tap) {
+                for (unsigned budget=0;budget<64;budget++) {
+                    uint8_t packet[VN_PACKET]; ssize_t n;
+
+                    if (fd==c.udp) {
+                        struct sockaddr_in from; socklen_t size=sizeof(from);
+                        n=recvfrom(fd,packet,sizeof(packet),MSG_TRUNC,(struct sockaddr *)&from,&size);
+
+                        if (n>=0) {
+                            if ((size_t)n>sizeof(packet)||size!=sizeof(from)||!vn_same_endpoint(&from,&c.server)) c.drops++;
+                            else receive_packet(&c,packet,(size_t)n);
+                        }
                     } else {
                         n=read(fd,packet,sizeof(packet));
 
