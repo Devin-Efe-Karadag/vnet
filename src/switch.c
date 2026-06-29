@@ -19,6 +19,20 @@ struct relay {
     int udp;
     uint64_t rejected, replay, bad_tag, floods, unicasts, send_drop;
 };
+static void status(const struct relay *r) {
+    unsigned active=0,macs=0;
+
+    for (size_t i=0;i<r->count;i++) active+=(unsigned)r->peers[i].active;
+
+    for (unsigned i=0;i<VN_MACS;i++) macs+=(unsigned)r->macs[i].used;
+    vn_log("status active=%u macs=%u rejected=%llu replay=%llu bad_tag=%llu flood=%llu unicast=%llu send_drop=%llu",
+        active,macs,(unsigned long long)r->rejected,(unsigned long long)r->replay,
+        (unsigned long long)r->bad_tag,(unsigned long long)r->floods,
+        (unsigned long long)r->unicasts,(unsigned long long)r->send_drop);
+    for (size_t i=0;i<r->count;i++) if (r->peers[i].active) {
+        const struct vn_peer *p=&r->peers[i]; char node[33]; vn_hex(node,p->node,16);
+        vn_log("peer=%zu node=%s rx=%llu tx=%llu drops=%llu",i,node,
+            (unsigned long long)p->rx,(unsigned long long)p->tx,(unsigned long long)p->drops);
 }
     struct vn_peer *p=&r->peers[index]; p->active=0;
     vn_log("peer_expire peer=%u reason=%s",index,reason);

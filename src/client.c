@@ -22,6 +22,10 @@ static void reset(struct client *c) {
     sodium_memzero(&c->session,sizeof(c->session)); randombytes_buf(c->challenge,32);
     c->active=0; c->started=vn_now(); vn_log("connecting server=%s",c->o.endpoint);
 }
+static void status(const struct client *c) {
+    vn_log("status active=%d rx=%llu tx=%llu drops=%llu",c->active,
+        (unsigned long long)c->rx,(unsigned long long)c->tx,(unsigned long long)c->drops);
+}
 static void send_encrypted(struct client *c, uint8_t type, const uint8_t *data, size_t size) {
     uint8_t packet[VN_PACKET]; int n=vn_seal(&c->session,c->o.network,c->id.node,type,data,size,packet);
 
