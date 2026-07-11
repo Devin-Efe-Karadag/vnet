@@ -11,3 +11,6 @@ setup_namespaces() {
     done
     local i=0 base letter
     for letter in a b c; do
+        base=$((i * 4))
+        ip netns add "vnet-$letter"
+        created_ns+=("vnet-$letter")

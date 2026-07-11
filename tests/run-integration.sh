@@ -10,6 +10,17 @@ if grep -q session_active "$ART/wrong-pin.log" || grep -q peer_active "$ART/rela
     echo 'FAIL incorrect relay pin authenticated' >&2; exit 1
 fi
 echo 'PASS real client rejects incorrect relay identity pin'
+# Intentional MTU mismatch to trigger the client's authenticated ERROR path.
+kill -TERM "${clients[2]}"; wait "${clients[2]}"
+previous=$(grep -c session_active "$ART/client-c.log")
+start_client 2 1200
+wait_count session_active "$ART/client-c.log" "$((previous+1))"
+"$BIN/test_namespace" "$ART/control.sock" client-error | tee "$ART/namespace-client-error.txt"
+wait_log 'error_sent reason=invalid-frame-size' "$ART/client-c.log"
+wait_log 'peer_expire peer=2 reason=remote-error' "$ART/relay-ns.log"
+wait_count session_active "$ART/client-c.log" "$((previous+2))"
+echo 'PASS real client emits authenticated ERROR; relay handles it; client reconnects'
+
 kill -TERM "$relay_pid"; wait "$relay_pid"; relay_pid=
 start_relay 2 "$ART/relay-restart.log"
 # C's deliberate stop/recreation assigned a new TAP MAC; remove old kernel ARP.
