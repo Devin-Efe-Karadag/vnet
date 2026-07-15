@@ -1,3 +1,6 @@
+"$BIN/test_proxy" "$ART/control.sock" >"$ART/proxy.log" 2>&1 &
+proxy_pid=$!
+wait_log proxy_ready "$ART/proxy.log"
 # A real client must not accept a relay whose identity differs from its pin.
 ip netns exec vnet-a "$BIN/vnet-client" --server 172.30.77.1:9993 --network-id labnet \
     --identity "$ART/a.key" --relay-public-key "$ART/outsider.pub" --interface vnet-bad \
@@ -10,6 +13,10 @@ if grep -q session_active "$ART/wrong-pin.log" || grep -q peer_active "$ART/rela
     echo 'FAIL incorrect relay pin authenticated' >&2; exit 1
 fi
 echo 'PASS real client rejects incorrect relay identity pin'
+for letter in a b c; do wait_log session_active "$ART/client-$letter.log"; done
+"$BIN/test_namespace" "$ART/control.sock" forward | tee "$ART/namespace-forward.txt"
+kill -USR1 "$relay_pid"; sleep .2
+grep -Eq 'replay=[1-9]' "$ART/relay-ns.log"
 grep -Eq 'bad_tag=[1-9]' "$ART/relay-ns.log"
 "$BIN/test_namespace" "$ART/control.sock" relay-error | tee "$ART/namespace-relay-error.txt"
 wait_log 'error_sent peer=0 reason=invalid-ethernet' "$ART/relay-ns.log"

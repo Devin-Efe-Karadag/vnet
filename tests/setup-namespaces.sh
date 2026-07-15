@@ -17,3 +17,6 @@ setup_namespaces() {
         ip link add "vn-host-$letter" type veth peer name "vn-peer-$letter"
         created_links+=("vn-host-$letter")
         ip link set "vn-peer-$letter" netns "vnet-$letter"
+        ip address add "172.30.77.$((base+1))/30" dev "vn-host-$letter"
+        ip link set "vn-host-$letter" up
+        ip -n "vnet-$letter" link set lo up
