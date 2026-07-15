@@ -96,6 +96,14 @@ static void receive_packet(struct relay *r, const uint8_t *packet, size_t n, con
     if (!p->active||!vn_same_endpoint(from,&p->endpoint)||memcmp(h.sid,p->session.sid,16)||h.type<VN_CONFIRM) {
         r->rejected++; p->drops++; return;
     }
+
+    int len=vn_open(&p->session,r->o.network,packet,n,&h,plain);
+
+    if (len<0) { p->drops++; if (len==-2) r->replay++; else r->bad_tag++; return; }
+    p->seen=vn_now(); p->rx++;
+
+    switch (h.type) {
+    case VN_CONFIRM: send_encrypted(r,(unsigned)index,VN_CONFIRM,NULL,0); break;
     case VN_KEEPALIVE: send_encrypted(r,(unsigned)index,VN_KEEPALIVE,NULL,0); break;
     case VN_GOODBYE: expire(r,(unsigned)index,"goodbye"); break;
     case VN_ERROR: expire(r,(unsigned)index,"remote-error"); break;

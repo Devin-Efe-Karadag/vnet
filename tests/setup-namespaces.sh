@@ -14,3 +14,6 @@ setup_namespaces() {
         base=$((i * 4))
         ip netns add "vnet-$letter"
         created_ns+=("vnet-$letter")
+        ip link add "vn-host-$letter" type veth peer name "vn-peer-$letter"
+        created_links+=("vn-host-$letter")
+        ip link set "vn-peer-$letter" netns "vnet-$letter"

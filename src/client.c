@@ -61,7 +61,16 @@ static void receive_packet(struct client *c, const uint8_t *packet, size_t n) {
     c->seen=vn_now(); c->rx++;
 
     switch (h.type) {
+    case VN_CONFIRM:
+        if (!c->active) { c->active=1; vn_log("session_active interface=%s",c->o.interface); }
+        break;
+    case VN_KEEPALIVE: break;
+    case VN_GOODBYE: reset(c); break;
+    case VN_ERROR: vn_log("error_received"); reset(c); break;
+    case VN_DATA: {
+        if (len<14||(unsigned)len>c->o.mtu+14) {
             c->drops++; vn_log("error_sent reason=invalid-frame-size");
+            send_encrypted(c,VN_ERROR,NULL,0); reset(c); break;
         }
 
         ssize_t written;

@@ -10,6 +10,12 @@ if grep -q session_active "$ART/wrong-pin.log" || grep -q peer_active "$ART/rela
     echo 'FAIL incorrect relay pin authenticated' >&2; exit 1
 fi
 echo 'PASS real client rejects incorrect relay identity pin'
+grep -Eq 'bad_tag=[1-9]' "$ART/relay-ns.log"
+"$BIN/test_namespace" "$ART/control.sock" relay-error | tee "$ART/namespace-relay-error.txt"
+wait_log 'error_sent peer=0 reason=invalid-ethernet' "$ART/relay-ns.log"
+wait_log error_received "$ART/client-a.log"
+wait_count session_active "$ART/client-a.log" 2
+echo 'PASS relay emits authenticated ERROR; real client handles it and reconnects'
 # Intentional MTU mismatch to trigger the client's authenticated ERROR path.
 kill -TERM "${clients[2]}"; wait "${clients[2]}"
 previous=$(grep -c session_active "$ART/client-c.log")
