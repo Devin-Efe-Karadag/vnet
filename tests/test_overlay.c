@@ -77,3 +77,81 @@ static void expect(struct probe peers[3], unsigned mask, uint8_t marker) {
             assert(h.type==VN_DATA&&plain[14]==marker);
         } else { if (n) assert(fprintf(stderr,"unexpected marker=%u peer=%u\n",marker,i)>=0); assert(n==0); }
     }
+}
+static void keep(struct probe *p) {
+    uint8_t packet[VN_PACKET],plain[VN_FRAME]; struct vn_header h;
+
+    int n=vn_seal(&p->session,"labnet",p->id.node,VN_KEEPALIVE,NULL,0,packet);
+    assert(n>0&&vn_send(p->fd,packet,(size_t)n,&relay)==0);
+    n=receive(p->fd,packet,500); assert(n>0);
+    assert(vn_open(&p->session,"labnet",packet,(size_t)n,&h,plain)==0&&h.type==VN_KEEPALIVE);
+}
+int main(int argc, char **argv) {
+    assert(argc==7&&sodium_init()>=0);
+    assert(vn_endpoint(argv[1],&relay)==0&&vn_public_load(argv[2],relay_pk)==0); vn_node(relay_node,relay_pk);
+
+    struct probe peers[3]={0},bad={0};
+    assert(establish(&bad,argv[6],"labnet")==-1); assert(close(bad.fd)==0);
+    assert(puts("PASS unauthorized identity rejected")>=0);
+    assert(establish(&bad,argv[3],"wrongnet")==-1); assert(close(bad.fd)==0);
+    assert(puts("PASS incorrect network rejected")>=0);
+
+    for (unsigned i=0;i<3;i++) assert(establish(&peers[i],argv[i+3],"labnet")==0);
+
+    const uint8_t a[6]={2,0,0,0,0,1}, b[6]={2,0,0,0,0,2}, c[6]={2,0,0,0,0,3};
+
+    const uint8_t broadcast[6]={255,255,255,255,255,255}, unknown[6]={2,0,0,0,0,99}, multi[6]={1,0,0,0,0,1};
+    uint8_t saved[VN_PACKET]; int saved_n=0;
+    send_frame(&peers[0],broadcast,a,1,saved,&saved_n); expect(peers,6,1);
+    assert(puts("PASS broadcast recipients B,C; no echo A; source A learned")>=0);
+    assert(vn_send(peers[0].fd,saved,(size_t)saved_n,&relay)==0); expect(peers,0,1);
+    assert(puts("PASS replay rejected on real relay")>=0);
+    send_frame(&peers[1],a,b,2,NULL,NULL); expect(peers,1,2);
+    send_frame(&peers[0],b,a,3,NULL,NULL); expect(peers,2,3);
+    assert(puts("PASS bidirectional known unicast only learned destination")>=0);
+    send_frame(&peers[0],unknown,a,4,NULL,NULL); expect(peers,6,4);
+    assert(puts("PASS unknown unicast flooded to B,C only")>=0);
+    send_frame(&peers[0],multi,a,5,NULL,NULL); expect(peers,6,5);
+    assert(puts("PASS multicast flooded to B,C only")>=0);
+    /* Move B's source MAC to C, then verify destination changes. */
+    send_frame(&peers[2],a,b,6,NULL,NULL); expect(peers,1,6);
+    send_frame(&peers[0],b,a,7,NULL,NULL); expect(peers,4,7);
+    assert(puts("PASS MAC move B -> C updates learned destination")>=0);
+    uint8_t frame[60]={0}; memcpy(frame,broadcast,6); memcpy(frame+6,a,6);
+
+    int n=vn_seal(&peers[0].session,"labnet",peers[0].id.node,VN_DATA,frame,60,saved);
+    assert(n>0); saved[n-1]^=1;
+    assert(vn_send(peers[0].fd,saved,(size_t)n,&relay)==0); expect(peers,0,0);
+    assert(puts("PASS tampered ciphertext rejected on real relay")>=0);
+    impersonate(&peers[0],argv[6]);
+    assert(puts("PASS claimed allowlisted identity without secret cannot confirm or evict active session")>=0);
+    keep(&peers[0]); keep(&peers[1]); keep(&peers[2]);
+    /* Malformed, truncated, oversized and invalid-version packets hit the live socket. */
+    uint8_t junk[2000]={0};
+
+    for (unsigned i=0;i<84;i++) assert(vn_send(peers[0].fd,junk,i,&relay)==0);
+    assert(vn_send(peers[0].fd,junk,sizeof(junk),&relay)==0);
+    n=vn_seal(&peers[0].session,"labnet",peers[0].id.node,VN_KEEPALIVE,NULL,0,saved);
+    assert(n>0); saved[4]=99; assert(vn_send(peers[0].fd,saved,(size_t)n,&relay)==0);
+    expect(peers,0,0); keep(&peers[0]);
+    assert(puts("PASS malformed/truncated/oversized/version packets rejected; relay still live")>=0);
+    /* Keep sessions alive while all MACs exceed the configured 2-second age. */
+
+    for (unsigned j=0;j<4;j++) { assert(sleep(1)==0); for (unsigned i=0;i<3;i++) keep(&peers[i]); }
+    send_frame(&peers[0],b,a,8,NULL,NULL); expect(peers,6,8);
+    assert(puts("PASS aged MAC B is now unknown and floods")>=0);
+    /* Test harness relay uses peer timeout 6, MAC age 2. Refresh C MAC via C,
+     * then stop C and keep A/B alive until it expires. Logs prove MAC removal
+     * in a second long-age relay phase run by the shell script. */
+    send_frame(&peers[2],a,c,9,NULL,NULL); expect(peers,1,9);
+
+    for (unsigned j=0;j<7;j++) { assert(sleep(1)==0); keep(&peers[0]); keep(&peers[1]); }
+    send_frame(&peers[0],broadcast,a,10,NULL,NULL); expect(peers,2,10);
+    assert(puts("PASS stopped C expires; broadcast reaches only B")>=0);
+    /* Resume C's expired session: a valid old packet cannot reactivate it. */
+    send_frame(&peers[2],broadcast,c,11,NULL,NULL); expect(peers,0,11);
+    assert(puts("PASS expired session cannot inject frames")>=0);
+
+    for (unsigned i=0;i<3;i++) { assert(close(peers[i].fd)==0); sodium_memzero(&peers[i],sizeof(peers[i])); }
+    sodium_memzero(&bad,sizeof(bad)); return 0;
+}

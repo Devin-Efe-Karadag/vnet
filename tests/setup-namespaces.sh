@@ -20,3 +20,6 @@ setup_namespaces() {
         ip address add "172.30.77.$((base+1))/30" dev "vn-host-$letter"
         ip link set "vn-host-$letter" up
         ip -n "vnet-$letter" link set lo up
+        ip -n "vnet-$letter" address add "172.30.77.$((base+2))/30" dev "vn-peer-$letter"
+        ip -n "vnet-$letter" link set "vn-peer-$letter" up
+        # IPv6 is out of scope; disable it only inside these test namespaces.

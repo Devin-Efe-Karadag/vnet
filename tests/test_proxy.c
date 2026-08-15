@@ -53,3 +53,57 @@ int main(int argc, char **argv) {
                 if (n<0&&errno==EAGAIN) continue;
 
                 if (!n) { assert(close(controller)==0); controller=-1; continue; }
+                assert(n==2&&strchr("RTNVLOUSX",command[0])&&strchr("ud",command[1]));
+                mode=command[0]; direction=command[1];
+                assert(send(fd,command,sizeof(command),MSG_NOSIGNAL)==sizeof(command));
+            } else if (fd==timer) {
+                uint64_t ticks; assert(read(fd,&ticks,sizeof(ticks))==sizeof(ticks));
+            } else if (fd==signals) {
+                struct signalfd_siginfo sig; assert(read(fd,&sig,sizeof(sig))==sizeof(sig));
+
+                if (sig.ssi_signo!=SIGUSR1) running=0;
+            } else {
+                uint8_t packet[2000]; struct sockaddr_in from; socklen_t size=sizeof(from);
+
+                ssize_t n=recvfrom(fd,packet,sizeof(packet),0,(struct sockaddr *)&from,&size);
+
+                if (n<0&&errno==EAGAIN) continue;
+                assert(n>=0&&size==sizeof(from));
+
+                int uplink=fd==front;
+
+                if (uplink) client=from;
+                else if (!vn_same_endpoint(&from,&relay)||!client.sin_port) continue;
+
+                int out=uplink?back:front;
+
+                const struct sockaddr_in *to=uplink?&relay:&client;
+
+                int target=n>=(ssize_t)VN_HEADER&&packet[5]==(mode=='X'?VN_ERROR:VN_DATA);
+
+                if (mode&&direction==(uplink?'u':'d')&&target) {
+                    char applied=mode; mode=0;
+
+                    switch (applied) {
+                    case 'R': assert(vn_send(out,packet,(size_t)n,to)==0); break;
+                    case 'T': case 'X': packet[n-1]^=1; break;
+                    case 'N': packet[8]^=1; break;
+                    case 'V': packet[4]=255; break;
+                    case 'L': n=VN_HEADER-1; break;
+                    case 'O': memset(packet+n,0,sizeof(packet)-(size_t)n); n=sizeof(packet); break;
+                    case 'U': memset(packet+40,0,16); break;
+                    case 'S': packet[56]^=1; break;
+                    default: assert(0);
+                    }
+                    vn_log("fault_applied mode=%c direction=%c",applied,direction);
+                }
+                assert(vn_send(out,packet,(size_t)n,to)==0);
+            }
+        }
+    }
+
+    if (controller>=0) assert(close(controller)==0);
+    assert(close(listener)==0&&close(front)==0&&close(back)==0);
+    assert(close(timer)==0&&close(signals)==0&&close(ep)==0);
+    assert(unlink(argv[1])==0); return 0;
+}
