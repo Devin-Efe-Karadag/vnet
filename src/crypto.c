@@ -119,13 +119,17 @@ int vn_seal(struct vn_session *s, const char *network, const uint8_t sender[16],
     struct vn_header h={.type=type,.seq=++s->sent,.len=(uint16_t)(n+VN_TAG)};
     memcpy(h.node,sender,16); memcpy(h.sid,s->sid,16);
     vn_header_write(out,network,&h);
+    uint8_t nonce[24]; memcpy(nonce,s->tx_prefix,16); vn_put64(nonce+16,h.seq);
+
     unsigned long long clen=0;
 
     if (crypto_aead_xchacha20poly1305_ietf_encrypt(out+VN_HEADER,&clen,plain,n,
+        out,VN_HEADER,NULL,nonce,s->tx)) return -1;
     return (int)(VN_HEADER+clen);
 }
 int vn_open(struct vn_session *s, const char *network, const uint8_t *packet,
             size_t n, struct vn_header *h, uint8_t *plain) {
+    if (!s->ready||vn_header_read(h,packet,n,network)||h->type<VN_CONFIRM||
         sodium_memcmp(h->sid,s->sid,16)) return -1;
     uint64_t delta=0;
 
@@ -133,6 +137,7 @@ int vn_open(struct vn_session *s, const char *network, const uint8_t *packet,
         delta=s->highest-h->seq;
 
         if (delta>=64||(s->window&(UINT64_C(1)<<delta))) return -2;
+    }
     uint8_t nonce[24]; memcpy(nonce,s->rx_prefix,16); vn_put64(nonce+16,h->seq);
 
     unsigned long long plen=0;
@@ -140,6 +145,7 @@ int vn_open(struct vn_session *s, const char *network, const uint8_t *packet,
     if (crypto_aead_xchacha20poly1305_ietf_decrypt(plain,&plen,NULL,packet+VN_HEADER,
         h->len,packet,VN_HEADER,nonce,s->rx)) return -1;
     if (h->seq>s->highest) {
+        delta=h->seq-s->highest;
         s->window=delta>=64?1:(s->window<<delta)|1; s->highest=h->seq;
     } else s->window|=UINT64_C(1)<<delta;
     return (int)plen;

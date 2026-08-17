@@ -23,3 +23,6 @@ setup_namespaces() {
         ip -n "vnet-$letter" address add "172.30.77.$((base+2))/30" dev "vn-peer-$letter"
         ip -n "vnet-$letter" link set "vn-peer-$letter" up
         # IPv6 is out of scope; disable it only inside these test namespaces.
+        ip netns exec "vnet-$letter" sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
+        i=$((i+1))
+    done

@@ -53,20 +53,42 @@ int main(void) {
     memcpy(packet,saved,(size_t)n); packet[79]=100;
     assert(vn_open(&server,"labnet",packet,(size_t)n,&h,plain)==-1);
     assert(server.highest==2); /* forged high sequence is authenticated AD */
+    assert(vn_open(&server,"labnet",saved,(size_t)n,&h,plain)==60);
     assert(!memcmp(plain,frame,60));
+    assert(vn_open(&server,"wrong",saved,(size_t)n,&h,plain)==-1);
+
     int old_n=vn_seal(&client,"labnet",a.node,VN_KEEPALIVE,NULL,0,saved);
-    assert(vn_open(&server,"labnet",packet,(size_t)n,&h,plain)==0);
-    old_n=vn_seal(&client,"labnet",a.node,VN_KEEPALIVE,NULL,0,saved);
     n=vn_seal(&client,"labnet",a.node,VN_KEEPALIVE,NULL,0,packet);
+    assert(vn_open(&server,"labnet",packet,(size_t)n,&h,plain)==0);
+    assert(vn_open(&server,"labnet",saved,(size_t)old_n,&h,plain)==0); /* reorder allowed */
+    old_n=vn_seal(&client,"labnet",a.node,VN_KEEPALIVE,NULL,0,saved);
+    client.sent+=64;
+    n=vn_seal(&client,"labnet",a.node,VN_KEEPALIVE,NULL,0,packet);
+    assert(vn_open(&server,"labnet",packet,(size_t)n,&h,plain)==0);
     assert(vn_open(&server,"labnet",saved,(size_t)old_n,&h,plain)==-2);
+    packet[56]^=1; assert(vn_open(&server,"labnet",packet,(size_t)n,&h,plain)==-1);
+
     struct vn_session other;
+    challenge[0]^=1;
     assert(vn_derive(&other,&a,b.pk,challenge,sid,"labnet",0)==0);
+    assert(memcmp(other.tx,client.tx,32));
     client.sent=UINT64_MAX;
+    assert(vn_seal(&client,"labnet",a.node,VN_KEEPALIVE,NULL,0,packet)==-1);
     uint8_t zero[32]={0}; assert(vn_derive(&other,&a,zero,challenge,sid,"labnet",0)==-1);
+
+    struct vn_mac table[VN_MACS]={0}; uint8_t mac[6]={2,0,0,0,0,1};
     vn_mac_learn(table,mac,0,100); assert(vn_mac_find(table,mac)==0);
+    vn_mac_learn(table,mac,1,101); assert(vn_mac_find(table,mac)==1);
     vn_mac_age(table,102,2); assert(vn_mac_find(table,mac)==1);
+    vn_mac_age(table,103,2); assert(vn_mac_find(table,mac)==-1);
     vn_mac_learn(table,mac,2,104); vn_mac_remove_peer(table,2); assert(vn_mac_find(table,mac)==-1);
+    /* Fill directly, then verify oldest replacement without emitting 1024 logs. */
+
     for (unsigned i=0;i<VN_MACS;i++) { table[i].used=1; table[i].seen=100+i; table[i].addr[0]=4; }
+    vn_mac_learn(table,mac,3,2000); assert(table[0].peer==3&&!memcmp(table[0].addr,mac,6));
     sodium_memzero(&a,sizeof(a)); sodium_memzero(&b,sizeof(b));
+    sodium_memzero(&client,sizeof(client)); sodium_memzero(&server,sizeof(server)); sodium_memzero(&other,sizeof(other));
     assert(puts("PASS protocol: wire offsets, directional keys/nonces, bidirectional ERROR, AEAD, tamper, replay/reorder/stale, session binding, wrap, MAC move/aging/replacement")>=0);
+
+    return 0;
 }
