@@ -23,6 +23,15 @@ wait_log 'error_sent peer=0 reason=invalid-ethernet' "$ART/relay-ns.log"
 wait_log error_received "$ART/client-a.log"
 wait_count session_active "$ART/client-a.log" 2
 echo 'PASS relay emits authenticated ERROR; real client handles it and reconnects'
+# Long MAC age proves expiration removes still-fresh mappings.
+kill -STOP "${clients[2]}"
+wait_log 'peer_expire peer=2 reason=timeout' "$ART/relay-ns.log"
+grep -q 'mac_remove peer=2' "$ART/relay-ns.log"
+echo 'PASS stopped namespace client expires and its MAC is removed before MAC-age limit'
+kill -CONT "${clients[2]}"
+sleep 7
+ip netns exec vnet-c ping -n -c 2 -W 2 10.77.0.2 >>"$ART/ping.txt"
+[[ $(grep -c session_active "$ART/client-c.log") -ge 2 ]]
 # Intentional MTU mismatch to trigger the client's authenticated ERROR path.
 kill -TERM "${clients[2]}"; wait "${clients[2]}"
 previous=$(grep -c session_active "$ART/client-c.log")

@@ -26,3 +26,6 @@ setup_namespaces() {
         ip netns exec "vnet-$letter" sysctl -qw net.ipv6.conf.all.disable_ipv6=1 net.ipv6.conf.default.disable_ipv6=1
         i=$((i+1))
     done
+}
+cleanup_namespaces() {
+    local name

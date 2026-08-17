@@ -33,8 +33,11 @@ static void status(const struct relay *r) {
         const struct vn_peer *p=&r->peers[i]; char node[33]; vn_hex(node,p->node,16);
         vn_log("peer=%zu node=%s rx=%llu tx=%llu drops=%llu",i,node,
             (unsigned long long)p->rx,(unsigned long long)p->tx,(unsigned long long)p->drops);
+    }
 }
+static void expire(struct relay *r, unsigned index, const char *reason) {
     struct vn_peer *p=&r->peers[index]; p->active=0;
+    sodium_memzero(&p->session,sizeof(p->session)); vn_mac_remove_peer(r->macs,index);
     vn_log("peer_expire peer=%u reason=%s",index,reason);
 }
 static void send_encrypted(struct relay *r, unsigned index, uint8_t type, const uint8_t *data, size_t n) {

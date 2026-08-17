@@ -1,6 +1,9 @@
+#include "vnet_switch.h"
 #include <string.h>
+void vn_mac_remove_peer(struct vn_mac *t, unsigned peer) {
     for (unsigned i=0;i<VN_MACS;i++) if (t[i].used&&t[i].peer==peer) {
         t[i].used=0; vn_log("mac_remove peer=%u",peer);
+    }
 }
 void vn_mac_age(struct vn_mac *t, uint64_t now, unsigned age) {
     for (unsigned i=0;i<VN_MACS;i++) if (t[i].used&&now-t[i].seen>=age) {
