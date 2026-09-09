@@ -29,3 +29,6 @@ setup_namespaces() {
 }
 cleanup_namespaces() {
     local name
+    for name in "${created_ns[@]}"; do ip netns delete "$name" || true; done
+    for name in "${created_links[@]}"; do ip link delete "$name" 2>/dev/null || true; done
+}

@@ -104,3 +104,56 @@ int main(int argc, char **argv) {
     assert(connect(control,(struct sockaddr *)&addr,sizeof(addr))==0);
 
     if (!strcmp(argv[2],"forward")) {
+        const uint8_t unknown[6]={2,0,0,0,0,99},group[6]={1,0,0,0,0,1};
+        frame(&ports[0],broadcast,a,1,60); expect(ports,6,1);
+        pass("PASS namespace TAP broadcast reaches B,C once; no incoming echo on A");
+        frame(&ports[1],a,b,2,60); expect(ports,1,2);
+        frame(&ports[0],b,a,3,60); expect(ports,2,3);
+        pass("PASS namespace TAP known unicast only reaches learned destination");
+        frame(&ports[0],unknown,a,4,60); expect(ports,6,4);
+        frame(&ports[0],group,a,5,60); expect(ports,6,5);
+        pass("PASS namespace TAP unknown unicast and multicast flood only to B,C");
+        frame(&ports[2],a,b,6,60); expect(ports,1,6);
+        frame(&ports[0],b,a,7,60); expect(ports,4,7);
+        pass("PASS namespace TAP source learning and MAC move B -> C");
+        uint8_t marker=20;
+
+        for (const char *mode="RTNVLOUS";*mode;mode++) {
+            arm(control,*mode,'u'); frame(&ports[0],broadcast,a,marker,60);
+            expect(ports,*mode=='R'?6:0,marker++);
+            /* A fresh frame must still traverse the real TAP/AEAD path. */
+            frame(&ports[0],broadcast,a,marker,60); expect(ports,6,marker++);
+        }
+        pass("PASS namespace TAP uplink replay delivered once; tamper/network/version/truncation/oversize/node/session mutations rejected");
+
+        for (const char *mode="RTNVLOS";*mode;mode++) {
+            arm(control,*mode,'d'); frame(&ports[1],a,b,marker,60);
+            expect(ports,*mode=='R'?1:0,marker++);
+            frame(&ports[1],a,b,marker,60); expect(ports,1,marker++);
+        }
+        pass("PASS namespace TAP downlink replay delivered once; tamper/network/version/truncation/oversize/session mutations rejected");
+    } else if (!strcmp(argv[2],"age")) {
+        frame(&ports[0],broadcast,a,100,60); expect(ports,6,100);
+        frame(&ports[1],a,b,101,60); expect(ports,1,101);
+        frame(&ports[0],b,a,102,60); expect(ports,2,102);
+
+        struct timespec wait={.tv_sec=4}; assert(nanosleep(&wait,NULL)==0);
+        frame(&ports[0],b,a,103,60); expect(ports,6,103);
+        pass("PASS namespace TAP MAC ages while real clients keep sessions alive; old unicast now floods");
+    } else if (!strcmp(argv[2],"relay-error")) {
+        const uint8_t invalid[6]={1,0,0,0,0,1};
+        frame(&ports[0],broadcast,invalid,110,60); expect(ports,0,110);
+        pass("PASS namespace TAP authenticated invalid source not forwarded; relay ERROR checked by script");
+    } else if (!strcmp(argv[2],"client-error")) {
+        /* C deliberately runs MTU 1200 in this negative test. */
+        frame(&ports[0],broadcast,a,111,60); expect(ports,6,111);
+        frame(&ports[2],a,c,112,60); expect(ports,1,112);
+        frame(&ports[0],c,a,113,1250); expect(ports,0,113);
+        pass("PASS namespace TAP authenticated oversized downlink not injected; client ERROR checked by script");
+    } else assert(0);
+    assert(close(control)==0);
+
+    for (unsigned i=0;i<3;i++) assert(close(ports[i].fd)==0);
+
+    return 0;
+}
